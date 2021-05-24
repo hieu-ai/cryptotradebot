@@ -2,21 +2,15 @@ import ccxt
 import schedule
 import time
 import pandas as pd
-
+import matplotlib.pyplot as plt
 pd.set_option('display.max_rows', None)
-# remove warinings of modify content while in loops from pandas
+
 import warnings
 warnings.filterwarnings('ignore')
 import numpy as np
 
 from datetime import datetime
-exchange = ccxt.binanceus(
-    {
-        "apiKey": 'your API',
-        "secret": 'your secrect key'
-    }
-)
-print(exchange.fetch_balance())
+exchange = ccxt.binanceus()
 def tr(df):
     df['previous_close'] = df['close'].shift(1)
     df['high-low'] = abs(df['high'] - df['low'])
@@ -39,16 +33,16 @@ def supertrend(df, period=10, atr_multiplier=3):
     # basic lower band = (high +low /2) - (multiplier *atr)
     df['atr'] = atr(df, period)
     df['upperband'] = ((df['high'] + df['low'])/2) + (atr_multiplier * df['atr'])
-    #df['lowerband'] = ((df['high'] + df['low'])/2) - (atr_multiplier * df['atr'])
-    df['lowerband'] = ((df['high'] + df['low'])/2) - (2 * df['atr'])
+    df['lowerband'] = ((df['high'] + df['low'])/2) - (atr_multiplier * df['atr'])
     df['in_uptrend']  = True
-
+    #print (len(df.index))
     for current in range(1,len(df.index)):
         previous = current - 1
         if df['close'][current] > df['upperband'][previous]:
             df['in_uptrend'][current] =True
         elif df['close'][current] < df['lowerband'][previous]:
             df['in_uptrend'][current] = False
+
         else:
             df['in_uptrend'][current] = df['in_uptrend'][previous]
             if df['in_uptrend'][current] and df['lowerband'][current] < df['lowerband'][previous]:
@@ -56,23 +50,25 @@ def supertrend(df, period=10, atr_multiplier=3):
 
             if not df['in_uptrend'][current] and df['upperband'][current] > df['upperband'][previous]:
                 df['upperband'][current] = df['upperband'][previous]
+
     return df
 
 in_position = False
 def check_buy_sell_signals(df):
     global in_position
-    #print("checking for buys and sell")
+    print("checking for buys and sell")
     print(df.tail(5))
     last_row_index = len(df.index) - 1
     previous_row_index = last_row_index - 1
+
+
     #print (last_row_index)
     # print(previous_row_index)
+    """
     if not df['in_uptrend'][previous_row_index] and df['in_uptrend'][last_row_index]:
         print("changed to uptrend, buy")
         if not in_position:
             order = exchange.create_market_buy_order('ETH/USD',0.04)
-            print("BUY TRIGGER")
-            print(df.tail(5))
             print(order)
             in_position = True
         else:
@@ -80,18 +76,18 @@ def check_buy_sell_signals(df):
         
 
     if df['in_uptrend'][previous_row_index] and not df['in_uptrend'][last_row_index]:
-        print("changed to downtrend, sell")
+        print("changed to uptrend, sell")
         if in_position:
-            order = exchange.create_market_sell_order('ETH/USD',0.04)
-            print(df.tail(5))
+            order = exchange.create_market_sell_order('ETH/USD',0.039)
             print(order)
             in_position = False
         else:
             print("You aren't in position")
-
+    """
 
 def fetch_bars():
-    #print(f"Fetching new bars for {datetime.now().isoformat()}")
+    print(f"Fetching new bars for {datetime.now().isoformat()}")
+
     try:
         bars = exchange.fetch_ohlcv('ETH/USDT', timeframe='1m', limit=100)
     except ccxt.NetworkError as e:
@@ -106,16 +102,24 @@ def fetch_bars():
         print(exchange.id, 'fetch_ohlcv failed with:', str(e))
         # retry or whatever
         # ...
-
+    
     df = pd.DataFrame(bars[:], columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit = 'ms')
 
     supertrend_data = supertrend(df)
 
+    """
+    plt.plot(df['timestamp'],df['close'])
+    plt.xlabel('Times')
+    plt.ylabel('prices')
+    plt.title('Supertrend graph')
+    plt.figure().show()
+    """
+
     check_buy_sell_signals(supertrend_data)
     #print(supertrend_data)
 
-schedule.every(1).seconds.do(fetch_bars)
+schedule.every(60).seconds.do(fetch_bars)
 #supertrend(df)
 while True:
     schedule.run_pending()
